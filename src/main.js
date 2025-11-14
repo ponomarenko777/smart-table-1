@@ -7,48 +7,89 @@ import {initData} from "./data.js";
 import {processFormData} from "./lib/utils.js";
 
 import {initTable} from "./components/table.js";
-// @todo: подключение
+import {initPagination} from "./components/pagination.js";
+import {initSorting} from "./components/sorting.js";
+import {initFiltering} from "./components/filtering.js";
 
 
-// Исходные данные используемые в render()
+// Исходные данные
 const {data, ...indexes} = initData(sourceData);
 
 /**
  * Сбор и обработка полей из таблицы
- * @returns {Object}
  */
 function collectState() {
     const state = processFormData(new FormData(sampleTable.container));
 
+    const rowsPerPage = parseInt(state.rowsPerPage);
+    const page = parseInt(state.page ?? 1);
+
     return {
-        ...state
+        ...state,
+        rowsPerPage,
+        page
     };
 }
 
 /**
- * Перерисовка состояния таблицы при любых изменениях
- * @param {HTMLButtonElement?} action
+ * Перерисовка таблицы
  */
 function render(action) {
-    let state = collectState(); // состояние полей из таблицы
-    let result = [...data]; // копируем для последующего изменения
-    // @todo: использование
+    let state = collectState();
+    let result = [...data];
 
+    // Фильтрация
+    result = applyFiltering(result, state, action);
 
-    sampleTable.render(result)
+    // Сортировка
+    result = applySorting(result, state, action);
+
+    // Пагинация
+    result = applyPagination(result, state, action);
+
+    sampleTable.render(result);
 }
 
+
+// Инициализация таблицы
 const sampleTable = initTable({
     tableTemplate: 'table',
     rowTemplate: 'row',
-    before: [],
-    after: []
+    before: ['header', 'filter'],     // заголовок + фильтр сверху
+    after: ['pagination']             // пагинация снизу
 }, render);
 
-// @todo: инициализация
+
+// Инициализация фильтрации
+const applyFiltering = initFiltering(sampleTable.filter.elements, {
+    searchBySeller: indexes.sellers
+});
 
 
+// Инициализация сортировки
+const applySorting = initSorting([
+    sampleTable.header.elements.sortByDate,
+    sampleTable.header.elements.sortByTotal
+]);
+
+
+// Инициализация пагинации
+const applyPagination = initPagination(
+    sampleTable.pagination.elements,
+    (el, page, isCurrent) => {
+        const input = el.querySelector('input');
+        const label = el.querySelector('span');
+        input.value = page;
+        input.checked = isCurrent;
+        label.textContent = page;
+        return el;
+    }
+);
+
+
+// Привязка таблицы к DOM
 const appRoot = document.querySelector('#app');
 appRoot.appendChild(sampleTable.container);
 
+// Первичная отрисовка
 render();
