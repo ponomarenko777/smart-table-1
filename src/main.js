@@ -1,23 +1,22 @@
 import './fonts/ys-display/fonts.css'
 import './style.css'
 
-import {data as sourceData} from "./data/dataset_1.js";
+import { data as sourceData } from "./data/dataset_1.js";
 
-import {initData} from "./data.js";
-import {processFormData} from "./lib/utils.js";
+import { initData } from "./data.js";
+import { processFormData } from "./lib/utils.js";
 
-import {initTable} from "./components/table.js";
-import {initPagination} from "./components/pagination.js";
-import {initSorting} from "./components/sorting.js";
-import {initFiltering} from "./components/filtering.js";
-import {initSearching} from "./components/searching.js";
+import { initTable } from "./components/table.js";
+import { initPagination } from "./components/pagination.js";
+import { initSorting } from "./components/sorting.js";
+import { initFiltering } from "./components/filtering.js";
+import { initSearching } from "./components/searching.js";
 
-
-// Исходные данные
-const {data, ...indexes} = initData(sourceData);
+// Инициализация API
+const api = initData(sourceData);
 
 /**
- * Сбор и обработка полей из таблицы
+ * Сбор состояния формы
  */
 function collectState() {
     const state = processFormData(new FormData(sampleTable.container));
@@ -33,53 +32,52 @@ function collectState() {
 }
 
 /**
- * Перерисовка таблицы
+ * Асинхронная перерисовка таблицы
  */
-function render(action) {
+async function render(action) {
     let state = collectState();
-    let result = [...data];
-    // Поиск
-    result = applySearching(result, state, action);
+    let query = {}; // здесь копим параметры запроса
 
-    // Фильтрация
-    result = applyFiltering(result, state, action);
+    // --- сбор параметров запроса ---
+    query = applySearching(query, state, action);
+    query = applyFiltering(query, state, action);
+    query = applySorting(query, state, action);
+    query = applyPagination(query, state, action);
 
-    // Сортировка
-    result = applySorting(result, state, action);
+    // --- запрос данных ---
+    const { total, items } = await api.getRecords(query);
 
-    // Пагинация
-    result = applyPagination(result, state, action);
+    // --- обновляем пагинацию после запроса ---
+    updatePagination(total, query);
 
-    sampleTable.render(result);
+    // --- вывод данных ---
+    sampleTable.render(items);
 }
 
-
-// Инициализация таблицы
+/**
+ * Инициализация таблицы
+ */
 const sampleTable = initTable({
     tableTemplate: 'table',
     rowTemplate: 'row',
-    before: ['search', 'filter', 'header' ],     // заголовок + фильтр сверху
-    after: ['pagination']             // пагинация снизу
+    before: ['search', 'filter', 'header'],
+    after: ['pagination']
 }, render);
 
-
+// поиск
 const applySearching = initSearching('search');
 
-// Инициализация фильтрации
-const applyFiltering = initFiltering(sampleTable.filter.elements, {
-    searchBySeller: indexes.sellers
-});
+// фильтрация
+const { applyFiltering, updateIndexes } = initFiltering(sampleTable.filter.elements);
 
-
-// Инициализация сортировки
+// сортировка
 const applySorting = initSorting([
     sampleTable.header.elements.sortByDate,
     sampleTable.header.elements.sortByTotal
 ]);
 
-
-// Инициализация пагинации
-const applyPagination = initPagination(
+// пагинация
+const { applyPagination, updatePagination } = initPagination(
     sampleTable.pagination.elements,
     (el, page, isCurrent) => {
         const input = el.querySelector('input');
@@ -91,10 +89,21 @@ const applyPagination = initPagination(
     }
 );
 
+// вывод таблицы в DOM
+document.querySelector('#app').appendChild(sampleTable.container);
 
-// Привязка таблицы к DOM
-const appRoot = document.querySelector('#app');
-appRoot.appendChild(sampleTable.container);
+/**
+ * Асинхронная инициализация проекта
+ */
+async function init() {
+    const indexes = await api.getIndexes();
 
-// Первичная отрисовка
-render();
+    updateIndexes(sampleTable.filter.elements, {
+        searchBySeller: indexes.sellers
+        // если понадобятся покупатели, добавим:
+        // searchByCustomer: indexes.customers
+    });
+}
+
+// старт
+init().then(render);
